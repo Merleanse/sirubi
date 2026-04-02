@@ -1,0 +1,764 @@
+<!DOCTYPE html>
+<html lang="id">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SiRubi | Sistem Informasi Rute dan Halte Bus Sekolah Surabaya</title>
+
+    <!-- Menambahkan Favicon -->
+    <link rel="icon" type="image/png" href="logo.png">
+
+    <!-- Google Fonts: Kanit -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+
+    <!-- Leaflet CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+        integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
+
+    <!-- Phosphor Icons -->
+    <script src="https://unpkg.com/@phosphor-icons/web"></script>
+
+    <style>
+        body {
+            font-family: 'Kanit', sans-serif;
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+        }
+
+        .leaflet-popup-content-wrapper {
+            border-radius: 4px;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+            padding: 0;
+        }
+
+        .leaflet-popup-content {
+            margin: 0;
+            width: 250px !important;
+        }
+
+        .popup-header {
+            color: #d92d20;
+            font-weight: 600;
+            font-size: 14px;
+            padding: 10px 12px 5px 12px;
+            border-bottom: 2px solid #d92d20;
+            margin-bottom: 5px;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .popup-header i {
+            font-size: 18px;
+        }
+
+        .popup-body {
+            padding: 5px 12px 12px 12px;
+            font-size: 13px;
+            color: #d92d20;
+        }
+
+        .custom-icon-wrapper {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        ::-webkit-scrollbar {
+            width: 8px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: #00529C;
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: #FCD116;
+            border-radius: 4px;
+        }
+
+        .collapse-content {
+            transition: max-height 0.3s ease-out, padding 0.3s ease-out;
+            max-height: 500px;
+            overflow: hidden;
+        }
+
+        .collapse-content.closed {
+            max-height: 0;
+            padding-top: 0;
+            padding-bottom: 0;
+        }
+
+        .arrow-icon {
+            transition: transform 0.3s ease;
+        }
+
+        .arrow-icon.closed {
+            transform: rotate(-90deg);
+        }
+
+        #search-results {
+            max-height: 200px;
+            overflow-y: auto;
+        }
+
+        /* Animasi Sorotan Rute */
+        .route-highlight {
+            stroke-dasharray: 1000;
+            stroke-dashoffset: 1000;
+            animation: dash 2s linear forwards;
+        }
+
+        @keyframes dash {
+            to {
+                stroke-dashoffset: 0;
+            }
+        }
+    </style>
+</head>
+
+<body class="flex flex-col h-screen bg-[#00529C]">
+
+    <!-- CUSTOM TOAST MESSAGE (Pesan Notifikasi) -->
+    <div id="toast-msg"
+        class="absolute top-20 left-1/2 -translate-x-1/2 z-[9999] bg-red-700 text-white px-6 py-2 rounded shadow-lg border border-red-500 font-medium transition-opacity duration-300 opacity-0 pointer-events-none">
+        Pesan
+    </div>
+
+    <!-- HEADER -->
+    <header class="bg-[#FCD116] h-16 flex items-center justify-between px-4 md:px-6 shrink-0 z-50 shadow-md relative">
+        <div class="flex items-center gap-2 md:gap-4">
+            <!-- Hamburger Menu Button (Hanya muncul di Mobile) -->
+            <button onclick="toggleMobileMenu()"
+                class="md:hidden text-[#E3242B] p-1 rounded hover:bg-yellow-400 transition-colors focus:outline-none"
+                title="Buka Menu">
+                <i class="ph-bold ph-list text-2xl"></i>
+            </button>
+
+            <!-- Logo -->
+            <img src="logo.png" alt="Logo SiRubi" class="h-8 md:h-10 object-contain"
+                onerror="this.src='https://via.placeholder.com/150x40/E3242B/FCD116?text=LOGO+ANDA'">
+            <span class="text-[#E3242B] text-lg font-medium hidden md:inline">| Sistem Informasi Rute dan Halte Bus
+                Sekolah Surabaya</span>
+        </div>
+        <nav class="flex gap-3 md:gap-6">
+            <a href="#"
+                class="text-[#E3242B] hover:text-[#b91c22] font-medium text-sm md:text-lg decoration-2 underline-offset-4 hover:underline">Home</a>
+            <a href="#"
+                class="text-[#E3242B] hover:text-[#b91c22] font-medium text-sm md:text-lg decoration-2 underline-offset-4 underline">WebGIS</a>
+            <a href="#"
+                class="text-[#E3242B] hover:text-[#b91c22] font-medium text-sm md:text-lg decoration-2 underline-offset-4 hover:underline hidden sm:inline">Contact</a>
+        </nav>
+    </header>
+
+    <!-- MAIN CONTENT AREA -->
+    <div class="flex flex-1 overflow-hidden relative">
+
+        <!-- BACKDROP UNTUK MOBILE MENU -->
+        <div id="mobile-backdrop" onclick="toggleMobileMenu()"
+            class="absolute inset-0 bg-black/60 z-[40] hidden md:hidden transition-opacity"></div>
+
+        <!-- SIDEBAR -->
+        <!-- Menambahkan kelas responsif: posisi absolut + disembunyikan (-translate-x-full) di mobile, kembali normal di layar sedang (md:relative md:translate-x-0) -->
+        <aside id="sidebar"
+            class="w-80 max-w-[85vw] bg-[#00529C] p-4 flex flex-col gap-4 overflow-y-auto z-[50] absolute inset-y-0 left-0 transform -translate-x-full md:relative md:translate-x-0 transition-transform duration-300 ease-in-out shadow-2xl">
+
+            <!-- Tombol Tutup (Hanya di Mobile) -->
+            <div class="md:hidden flex justify-end pb-2 mb-2 border-b border-blue-800">
+                <button onclick="toggleMobileMenu()" class="text-[#FCD116] hover:text-white flex items-center gap-1">
+                    <span class="text-sm font-medium">Tutup Panel</span>
+                    <i class="ph-bold ph-x text-xl"></i>
+                </button>
+            </div>
+
+            <!-- PANEL 1: Menu Rute -->
+            <div class="bg-[#FCD116] rounded-sm shadow border-2 border-yellow-500 overflow-hidden">
+                <button onclick="toggleCollapse('menu-rute-content', 'arrow-rute')"
+                    class="w-full flex items-center gap-2 bg-[#FCD116] p-2 hover:bg-yellow-400 transition-colors">
+                    <i class="ph-fill ph-circle text-[#E3242B] text-xs"></i>
+                    <span class="font-semibold text-[#E3242B] flex-1 text-left">Menu Rute</span>
+                    <i id="arrow-rute" class="ph-bold ph-caret-down text-[#E3242B] arrow-icon"></i>
+                </button>
+                <div id="menu-rute-content" class="collapse-content bg-[#FCD116] p-3 pt-0 flex flex-col gap-2">
+                    <button id="btn-rute-existing" onclick="toggleLayer('ruteExisting', this)"
+                        class="bg-[#E3242B] text-[#FCD116] font-medium py-1 px-4 rounded-sm border-2 border-orange-600 hover:bg-red-700 flex items-center justify-center gap-2 transition-all">
+                        <i class="ph-fill ph-circle text-xs text-yellow-300 opacity-0 indicator"></i>
+                        Rute Existing
+                    </button>
+                    <button id="btn-rute-rekomendasi" onclick="toggleLayer('ruteRekomendasi', this)"
+                        class="bg-[#E3242B] text-[#FCD116] font-medium py-1 px-4 rounded-sm border-2 border-orange-600 hover:bg-red-700 flex items-center justify-center gap-2 transition-all">
+                        <i class="ph-fill ph-circle text-xs text-yellow-300 opacity-0 indicator"></i>
+                        Rekomendasi Rute
+                    </button>
+                </div>
+            </div>
+
+            <!-- PANEL 2: Pencarian (Halte & Sekolah) -->
+            <div class="bg-[#FCD116] rounded-sm shadow border-2 border-yellow-500 p-2 relative">
+                <div class="flex items-center gap-2 mb-2">
+                    <i class="ph ph-magnifying-glass text-[#E3242B] text-lg font-bold"></i>
+                    <span class="font-semibold text-[#E3242B]">Pencarian</span>
+                </div>
+                <div class="relative">
+                    <input type="text" id="search-input" placeholder="Cari Halte / Sekolah.."
+                        class="w-full bg-[#E3242B] text-[#FCD116] placeholder-[#FCD116]/70 py-1.5 px-3 rounded-sm border-2 border-orange-600 focus:outline-none focus:ring-2 focus:ring-yellow-300">
+                    <i class="ph ph-magnifying-glass absolute right-2 top-1/2 -translate-y-1/2 text-[#FCD116]"></i>
+
+                    <ul id="search-results"
+                        class="absolute z-50 w-full bg-[#E3242B] mt-1 rounded shadow-lg border-2 border-orange-600 hidden">
+                        <!-- List diisi oleh JS -->
+                    </ul>
+                </div>
+            </div>
+
+            <!-- PANEL 2.5: Filter Kategori Sekolah -->
+            <div class="bg-[#FCD116] rounded-sm shadow border-2 border-yellow-500 p-2">
+                <div class="flex items-center gap-2 mb-2 border-b border-yellow-600 pb-1">
+                    <i class="ph-fill ph-funnel text-[#E3242B] text-xs"></i>
+                    <span class="font-semibold text-[#E3242B]">Filter Kategori Sekolah</span>
+                </div>
+                <div class="flex flex-col gap-1 pl-1 text-sm text-[#E3242B] font-medium">
+                    <label class="flex items-center gap-2 cursor-pointer hover:bg-yellow-400 p-1 rounded">
+                        <input type="checkbox" value="SD" class="school-filter accent-red-600 w-4 h-4 cursor-pointer"
+                            checked> Tingkat SD / Sederajat
+                    </label>
+                    <label class="flex items-center gap-2 cursor-pointer hover:bg-yellow-400 p-1 rounded">
+                        <input type="checkbox" value="SMP" class="school-filter accent-red-600 w-4 h-4 cursor-pointer"
+                            checked> Tingkat SMP / Sederajat
+                    </label>
+                    <label class="flex items-center gap-2 cursor-pointer hover:bg-yellow-400 p-1 rounded">
+                        <input type="checkbox" value="SMA" class="school-filter accent-red-600 w-4 h-4 cursor-pointer"
+                            checked> Tingkat SMA / Sederajat
+                    </label>
+                </div>
+            </div>
+
+            <!-- PANEL 3: Legenda -->
+            <div class="bg-[#FCD116] rounded-sm shadow border-2 border-yellow-500 p-2">
+                <div class="flex items-center gap-2 mb-2">
+                    <i class="ph-fill ph-circle text-[#E3242B] text-xs"></i>
+                    <span class="font-semibold text-[#E3242B]">Legenda</span>
+                </div>
+                <div class="flex flex-col gap-2 pl-2" id="legend-container">
+                    <!-- Legenda -->
+                </div>
+            </div>
+
+            <!-- PANEL 4: Basemap Toggle -->
+            <div class="bg-[#FCD116] rounded-sm shadow border-2 border-yellow-500 p-2">
+                <div class="flex items-center gap-2 mb-2">
+                    <i class="ph-fill ph-map-trifold text-[#E3242B] text-xs"></i>
+                    <span class="font-semibold text-[#E3242B]">Basemap</span>
+                </div>
+                <div class="flex gap-1">
+                    <button id="btn-basemap-osm" onclick="setBasemap('osm')"
+                        class="flex-1 bg-[#FCD116] text-[#E3242B] font-semibold py-1.5 px-2 rounded-sm border-b-4 border-r-2 border-yellow-600 transition-all flex items-center justify-center gap-1 active-basemap transform -translate-y-1">
+                        <i class="ph-fill ph-circle text-xs"></i>
+                        OpenStreet
+                    </button>
+                    <button id="btn-basemap-sat" onclick="setBasemap('satelit')"
+                        class="flex-1 bg-[#E3242B] text-[#FCD116] font-semibold py-1.5 px-2 rounded-sm border-b-4 border-r-2 border-red-800 transition-all flex items-center justify-center gap-1">
+                        <i class="ph-fill ph-circle text-xs text-transparent"></i>
+                        Citra Satelit
+                    </button>
+                </div>
+            </div>
+
+            <!-- PANEL 5: Aksi Bawah (Lokasi & Reset) -->
+            <div class="mt-auto pt-2 flex flex-col gap-2">
+                <!-- Tombol Navigasi Lokasi Saya -->
+                <button onclick="findMyLocation(); toggleMobileMenu();"
+                    class="w-full bg-[#E3242B] text-[#FCD116] font-bold py-2 px-2 rounded-sm border-b-4 border-r-2 border-red-800 hover:bg-red-700 transition-all flex items-center justify-center gap-2"
+                    title="Cari Lokasi Saya ke Halte">
+                    <i class="ph-bold ph-crosshair text-xl"></i>
+                    Lokasi Saya ke Halte
+                </button>
+
+                <!-- Tombol Reset Tampilan -->
+                <button onclick="resetMap(); toggleMobileMenu();"
+                    class="w-full bg-[#FCD116] text-[#E3242B] font-bold py-2 px-2 rounded-sm border-b-4 border-r-2 border-yellow-600 hover:bg-yellow-400 transition-all flex items-center justify-center gap-2">
+                    <i class="ph-bold ph-house text-xl"></i>
+                    Reset Tampilan
+                </button>
+            </div>
+
+        </aside>
+
+        <!-- MAP CONTAINER -->
+        <div id="map" class="flex-1 h-full z-[10] relative">
+            <!-- Peta Leaflet akan dimuat di sini -->
+        </div>
+
+    </div>
+
+    <!-- Leaflet JS -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+        integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+
+    <script>
+        // --- LOGIKA MENU MOBILE ---
+        function toggleMobileMenu() {
+            const sidebar = document.getElementById('sidebar');
+            const backdrop = document.getElementById('mobile-backdrop');
+
+            // Memicu kelas Tailwind agar sidebar masuk/keluar
+            sidebar.classList.toggle('-translate-x-full');
+            backdrop.classList.toggle('hidden');
+        }
+
+        // --- TOAST NOTIFICATION FUNCTION ---
+        function showToast(msg) {
+            const toast = document.getElementById('toast-msg');
+            toast.textContent = msg;
+            toast.classList.remove('opacity-0');
+            setTimeout(() => toast.classList.add('opacity-0'), 3000);
+        }
+
+        const mapStyles = {
+            halte: {
+                label: 'Halte Bus Sekolah',
+                type: 'point',
+                htmlMarker: `<div style="background-color: #E3242B; width: 28px; height: 28px; border-radius: 50%; border: 2px solid white; box-shadow: 0 0 4px rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; color: white; font-size: 16px;"><i class="ph-fill ph-bus"></i></div>`,
+                legendHtml: `<i class="ph-fill ph-bus" style="color: #E3242B; font-size: 20px;"></i>`
+            },
+            sekolah: {
+                label: 'Lokasi Sekolah',
+                type: 'point',
+                htmlMarker: `<div style="background-color: #E36A2B; width: 28px; height: 28px; border-radius: 50%; border: 2px solid white; box-shadow: 0 0 4px rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; color: white; font-size: 16px;"><i class="ph-fill ph-student"></i></div>`,
+                legendHtml: `<i class="ph-fill ph-student" style="color: #E36A2B; font-size: 20px;"></i>`
+            },
+            ruteExisting: {
+                label: 'Rute Bus Sekolah (Existing)',
+                type: 'line',
+                leafletStyle: { color: '#E3242B', weight: 4, opacity: 0.8 },
+                legendHtml: `<div style="background-color: #E3242B; width: 16px; height: 3px;"></div>`
+            },
+            ruteRekomendasi: {
+                label: 'Rute Bus Sekolah (Rekomendasi)',
+                type: 'line',
+                leafletStyle: { color: '#2a9d8f', weight: 4, opacity: 0.8, dashArray: '5, 10' },
+                legendHtml: `<div style="border-top: 3px dashed #2a9d8f; width: 16px; height: 0;"></div>`
+            }
+        };
+
+        const iconHalte = L.divIcon({ className: 'custom-icon-wrapper', html: mapStyles.halte.htmlMarker, iconSize: [28, 28], iconAnchor: [14, 14], popupAnchor: [0, -14] });
+        const iconSekolah = L.divIcon({ className: 'custom-icon-wrapper', html: mapStyles.sekolah.htmlMarker, iconSize: [28, 28], iconAnchor: [14, 14], popupAnchor: [0, -14] });
+
+        const urlGeoJSON = {
+            halte: 'halte.geojson',
+            sekolah: 'sekolah.geojson',
+            ruteExisting: 'rute_existing.geojson',
+            ruteRekomendasi: 'rute_rekomendasi.geojson'
+        };
+
+        let dataHalteRaw = null;
+        let dataSekolahRaw = null;
+
+        const searchData = {};
+
+        const map = L.map('map', { zoomControl: false }).setView([-7.2900, 112.7500], 13);
+        const basemapOSM = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '&copy; OpenStreetMap contributors' });
+        const basemapSatelit = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', { attribution: 'Tiles &copy; Esri' });
+        basemapOSM.addTo(map);
+
+        map.on('click', function () {
+            if (ruteLayers.ruteExisting.active) layerRuteExisting.setStyle(mapStyles.ruteExisting.leafletStyle);
+            if (ruteLayers.ruteRekomendasi.active) layerRuteRekomendasi.setStyle(mapStyles.ruteRekomendasi.leafletStyle);
+        });
+
+        function updateSearchData() {
+            for (let key in searchData) delete searchData[key];
+
+            layerHalte.eachLayer(layer => {
+                if (layer.feature.properties.nama) {
+                    searchData[layer.feature.properties.nama.toLowerCase()] = { marker: layer, originalName: layer.feature.properties.nama, type: 'Halte' };
+                }
+            });
+            layerSekolah.eachLayer(layer => {
+                if (layer.feature.properties.nama) {
+                    searchData[layer.feature.properties.nama.toLowerCase()] = { marker: layer, originalName: layer.feature.properties.nama, type: 'Sekolah' };
+                }
+            });
+        }
+
+        function generatePopupHTML(title, address, subinfo, iconHtml) {
+            return `
+                <div class="popup-header">
+                    ${iconHtml || ''} <span>${title || 'Tanpa Nama'}</span>
+                </div>
+                <div class="popup-body">
+                    ${address || 'Alamat tidak tersedia'}<br>
+                    <span style="font-size: 11px; opacity: 0.8; margin-top: 5px; display: block;">${subinfo || ''}</span>
+                </div>
+            `;
+        }
+
+        // --- LAYER HALTE ---
+        const layerHalte = L.geoJSON(null, {
+            pointToLayer: function (feature, latlng) {
+                const marker = L.marker(latlng, { icon: iconHalte });
+                const nama = feature.properties.nama || "Halte Tanpa Nama";
+
+                const timetableHtml = `
+                    <div style="margin-top: 8px; border-top: 1px dashed #E3242B; padding-top: 5px;">
+                        <strong style="font-size: 11px;">Jadwal Estimasi Keberangkatan:</strong>
+                        <table style="width: 100%; font-size: 11px; margin-top: 2px;">
+                            <tr><td style="width: 35%;">Pagi</td><td>: 05:45 WIB, 06:15 WIB</td></tr>
+                            <tr><td>Siang</td><td>: 14:00 WIB, 15:30 WIB</td></tr>
+                        </table>
+                    </div>
+                `;
+                const finalHalteInfo = (feature.properties.info ? feature.properties.info + "<br>" : "") + timetableHtml;
+
+                const halteIconHtml = '<i class="ph-bold ph-bus"></i>';
+                const popupContent = generatePopupHTML(nama, feature.properties.alamat, finalHalteInfo, halteIconHtml);
+                marker.bindPopup(popupContent);
+                return marker;
+            }
+        });
+
+        // --- LAYER SEKOLAH ---
+        const layerSekolah = L.geoJSON(null, {
+            pointToLayer: function (feature, latlng) {
+                const marker = L.marker(latlng, { icon: iconSekolah });
+                let minDistance = Infinity;
+                let nearestHalte = "";
+
+                if (dataHalteRaw && dataHalteRaw.features) {
+                    dataHalteRaw.features.forEach(halte => {
+                        if (halte.geometry && halte.geometry.coordinates) {
+                            const hLatLng = L.latLng(halte.geometry.coordinates[1], halte.geometry.coordinates[0]);
+                            const distance = latlng.distanceTo(hLatLng);
+                            if (distance < minDistance) {
+                                minDistance = distance;
+                                nearestHalte = halte.properties.nama || "Halte";
+                            }
+                        }
+                    });
+                }
+
+                let jarakText = "";
+                if (minDistance !== Infinity) {
+                    const distKm = (minDistance / 1000).toFixed(1);
+                    jarakText = `${distKm} km dari ${nearestHalte}`;
+                } else {
+                    jarakText = "Jarak halte tidak diketahui";
+                }
+
+                const finalInfo = (feature.properties.info ? feature.properties.info + "<br>" : "") + `<strong style="display:block; margin-top:4px; font-weight:600;">${jarakText}</strong>`;
+                const nama = feature.properties.nama || "Sekolah Tanpa Nama";
+
+                const sekolahIconHtml = '<i class="ph-bold ph-student"></i>';
+                const popupContent = generatePopupHTML(nama, feature.properties.alamat, finalInfo, sekolahIconHtml);
+                marker.bindPopup(popupContent);
+                return marker;
+            }
+        });
+
+        function onEachRouteFeature(feature, layer) {
+            layer.on({
+                click: function (e) {
+                    L.DomEvent.stopPropagation(e);
+
+                    if (ruteLayers.ruteExisting.active) layerRuteExisting.setStyle(mapStyles.ruteExisting.leafletStyle);
+                    if (ruteLayers.ruteRekomendasi.active) layerRuteRekomendasi.setStyle(mapStyles.ruteRekomendasi.leafletStyle);
+
+                    layer.setStyle({
+                        weight: 8,
+                        color: '#FCD116',
+                        opacity: 1
+                    });
+
+                    if (!L.Browser.ie && !L.Browser.opera && !L.Browser.edge) {
+                        layer.bringToFront();
+                    }
+
+                    const namaRute = feature.properties.nama_rute || feature.properties.nama || "Jalur Bus Sekolah";
+                    const infoRute = feature.properties.info || "Menghubungkan simpul transportasi utama ke kawasan sekolah.";
+                    const popupContent = `
+                        <div class="popup-header" style="color:#00529C; border-bottom: 2px solid #00529C;">
+                            <i class="ph-bold ph-path"></i> <span>${namaRute}</span>
+                        </div>
+                        <div class="popup-body" style="color:#00529C;">
+                            ${infoRute}<br>
+                            <span style="font-size: 10px; opacity: 0.7; margin-top: 8px; display: block;">*Klik area kosong di peta untuk mereset sorotan.</span>
+                        </div>
+                    `;
+                    layer.bindPopup(popupContent).openPopup();
+                }
+            });
+        }
+
+        const layerRuteExisting = L.geoJSON(null, { style: mapStyles.ruteExisting.leafletStyle, onEachFeature: onEachRouteFeature });
+        const layerRuteRekomendasi = L.geoJSON(null, { style: mapStyles.ruteRekomendasi.leafletStyle, onEachFeature: onEachRouteFeature });
+
+        layerHalte.addTo(map);
+        layerSekolah.addTo(map);
+
+        const ruteLayers = {
+            'ruteExisting': { layer: layerRuteExisting, active: false },
+            'ruteRekomendasi': { layer: layerRuteRekomendasi, active: false }
+        };
+
+        async function loadAllGeoJSON() {
+            try {
+                const resHalte = await fetch(urlGeoJSON.halte);
+                if (resHalte.ok) {
+                    dataHalteRaw = await resHalte.json();
+                    layerHalte.addData(dataHalteRaw);
+                }
+
+                const resSekolah = await fetch(urlGeoJSON.sekolah);
+                if (resSekolah.ok) {
+                    dataSekolahRaw = await resSekolah.json();
+                    layerSekolah.addData(dataSekolahRaw);
+                }
+
+                const resRuteE = await fetch(urlGeoJSON.ruteExisting);
+                if (resRuteE.ok) layerRuteExisting.addData(await resRuteE.json());
+
+                const resRuteR = await fetch(urlGeoJSON.ruteRekomendasi);
+                if (resRuteR.ok) layerRuteRekomendasi.addData(await resRuteR.json());
+
+                updateSearchData();
+
+            } catch (error) {
+                console.warn("GeoJSON gagal dimuat via Fetch (normal jika tanpa Local Server).", error);
+            }
+        }
+
+        loadAllGeoJSON();
+
+        document.querySelectorAll('.school-filter').forEach(cb => {
+            cb.addEventListener('change', applySchoolFilter);
+        });
+
+        function applySchoolFilter() {
+            if (!dataSekolahRaw) return;
+            const checkedTypes = Array.from(document.querySelectorAll('.school-filter:checked')).map(cb => cb.value);
+
+            layerSekolah.clearLayers();
+
+            const filteredFeatures = dataSekolahRaw.features.filter(feature => {
+                if (checkedTypes.length === 0) return false;
+
+                const nama = (feature.properties.nama || "").toUpperCase();
+                let type = "OTHER";
+
+                if (nama.includes("SD") || nama.includes("MIN")) type = "SD";
+                else if (nama.includes("SMP") || nama.includes("MTS")) type = "SMP";
+                else if (nama.includes("SMA") || nama.includes("SMK") || nama.includes("MAN")) type = "SMA";
+
+                if (type === "OTHER") return true;
+                return checkedTypes.includes(type);
+            });
+
+            layerSekolah.addData(filteredFeatures);
+            updateSearchData();
+        }
+
+        let userMarker = null;
+        let userLine = null;
+
+        function findMyLocation() {
+            if (!navigator.geolocation) {
+                showToast("Peramban Anda tidak mendukung pelacakan lokasi.");
+                return;
+            }
+
+            showToast("Mencari lokasi Anda...");
+
+            navigator.geolocation.getCurrentPosition((position) => {
+                const userLat = position.coords.latitude;
+                const userLng = position.coords.longitude;
+                const userLatLng = L.latLng(userLat, userLng);
+
+                map.flyTo(userLatLng, 15);
+
+                if (userMarker) map.removeLayer(userMarker);
+                if (userLine) map.removeLayer(userLine);
+
+                let minDistance = Infinity;
+                let nearestHalteFeature = null;
+                let nearestHalteLatLng = null;
+
+                if (dataHalteRaw) {
+                    dataHalteRaw.features.forEach(halte => {
+                        if (halte.geometry && halte.geometry.coordinates) {
+                            const hLatLng = L.latLng(halte.geometry.coordinates[1], halte.geometry.coordinates[0]);
+                            const distance = userLatLng.distanceTo(hLatLng);
+                            if (distance < minDistance) {
+                                minDistance = distance;
+                                nearestHalteFeature = halte;
+                                nearestHalteLatLng = hLatLng;
+                            }
+                        }
+                    });
+                }
+
+                const userIcon = L.divIcon({
+                    className: 'custom-icon-wrapper',
+                    html: `<div style="background-color: #3b82f6; width: 22px; height: 22px; border-radius: 50%; border: 3px solid white; box-shadow: 0 0 8px rgba(0,0,0,0.6); animation: pulse 2s infinite;"></div>`,
+                    iconSize: [22, 22],
+                    iconAnchor: [11, 11]
+                });
+
+                userMarker = L.marker(userLatLng, { icon: userIcon, zIndexOffset: 1000 }).addTo(map);
+
+                if (nearestHalteFeature) {
+                    const distKm = (minDistance / 1000).toFixed(2);
+                    userMarker.bindPopup(`
+                        <div style="text-align:center; color:#00529C;">
+                            <strong style="font-size:14px; border-bottom:1px solid #00529C; padding-bottom:2px;">📍 Lokasi Anda Saat Ini</strong><br>
+                            <span style="font-size:12px; display:block; margin-top:5px;">Halte bus sekolah terdekat:</span>
+                            <strong style="color:#E3242B;">${nearestHalteFeature.properties.nama}</strong><br>
+                            <span style="font-size:11px; font-weight:bold;">(Jarak Tarik Lurus: ${distKm} km)</span>
+                        </div>
+                    `).openPopup();
+
+                    userLine = L.polyline([userLatLng, nearestHalteLatLng], {
+                        color: '#3b82f6',
+                        weight: 3,
+                        dashArray: '5, 10',
+                        opacity: 0.8
+                    }).addTo(map);
+                } else {
+                    userMarker.bindPopup(`<strong style="color:#00529C;">📍 Lokasi Anda Saat Ini</strong>`).openPopup();
+                }
+
+            }, (error) => {
+                showToast("Gagal mendapatkan lokasi. Pastikan izin GPS diaktifkan.");
+            }, { timeout: 10000 });
+        }
+
+        function buildLegend() {
+            const container = document.getElementById('legend-container');
+            container.innerHTML = `
+                <div class="flex items-center gap-2 text-[#E3242B] text-sm"><div class="w-6 flex justify-center">${mapStyles.halte.legendHtml}</div><span>${mapStyles.halte.label}</span></div>
+                <div class="flex items-center gap-2 text-[#E3242B] text-sm"><div class="w-6 flex justify-center">${mapStyles.sekolah.legendHtml}</div><span>${mapStyles.sekolah.label}</span></div>
+                <div class="flex items-center gap-2 text-[#E3242B] text-sm"><div class="w-6 flex justify-center">${mapStyles.ruteExisting.legendHtml}</div><span>Rute Bus Sekolah</span></div>
+            `;
+        }
+        buildLegend();
+
+        function toggleLayer(layerKey, btnElement) {
+            const ruteData = ruteLayers[layerKey];
+            const indicator = btnElement.querySelector('.indicator');
+            if (ruteData.active) {
+                map.removeLayer(ruteData.layer);
+                ruteData.active = false;
+                btnElement.classList.replace('bg-red-700', 'bg-[#E3242B]');
+                indicator.classList.replace('opacity-100', 'opacity-0');
+            } else {
+                map.addLayer(ruteData.layer);
+                ruteData.active = true;
+                btnElement.classList.replace('bg-[#E3242B]', 'bg-red-700');
+                indicator.classList.replace('opacity-0', 'opacity-100');
+            }
+        }
+
+        function toggleCollapse(contentId, arrowId) {
+            document.getElementById(contentId).classList.toggle('closed');
+            document.getElementById(arrowId).classList.toggle('closed');
+        }
+
+        function setBasemap(type) {
+            const btnOsm = document.getElementById('btn-basemap-osm');
+            const btnSat = document.getElementById('btn-basemap-sat');
+            const iconOsm = btnOsm.querySelector('i');
+            const iconSat = btnSat.querySelector('i');
+
+            if (type === 'osm') {
+                map.removeLayer(basemapSatelit);
+                basemapOSM.addTo(map);
+                btnOsm.className = "flex-1 bg-[#FCD116] text-[#E3242B] font-semibold py-1.5 px-2 rounded-sm border-b-4 border-r-2 border-yellow-600 transition-all flex items-center justify-center gap-1 transform -translate-y-1";
+                iconOsm.classList.remove('text-transparent');
+                btnSat.className = "flex-1 bg-[#E3242B] text-[#FCD116] font-semibold py-1.5 px-2 rounded-sm border-b-4 border-r-2 border-red-800 transition-all flex items-center justify-center gap-1";
+                iconSat.classList.add('text-transparent');
+            } else {
+                map.removeLayer(basemapOSM);
+                basemapSatelit.addTo(map);
+                btnSat.className = "flex-1 bg-[#FCD116] text-[#E3242B] font-semibold py-1.5 px-2 rounded-sm border-b-4 border-r-2 border-yellow-600 transition-all flex items-center justify-center gap-1 transform -translate-y-1";
+                iconSat.classList.remove('text-transparent');
+                iconSat.classList.add('text-[#E3242B]');
+                btnOsm.className = "flex-1 bg-[#E3242B] text-[#FCD116] font-semibold py-1.5 px-2 rounded-sm border-b-4 border-r-2 border-red-800 transition-all flex items-center justify-center gap-1";
+                iconOsm.classList.add('text-transparent');
+            }
+        }
+
+        function resetMap() {
+            map.setView([-7.2900, 112.7500], 13);
+            map.closePopup();
+            if (userMarker) map.removeLayer(userMarker);
+            if (userLine) map.removeLayer(userLine);
+            if (ruteLayers.ruteExisting.active) layerRuteExisting.setStyle(mapStyles.ruteExisting.leafletStyle);
+            if (ruteLayers.ruteRekomendasi.active) layerRuteRekomendasi.setStyle(mapStyles.ruteRekomendasi.leafletStyle);
+        }
+
+        const searchInput = document.getElementById('search-input');
+        const searchResults = document.getElementById('search-results');
+
+        searchInput.addEventListener('input', function () {
+            const val = this.value.toLowerCase();
+            searchResults.innerHTML = '';
+
+            const itemNames = Object.keys(searchData);
+
+            if (!val) {
+                searchResults.classList.add('hidden');
+                return;
+            }
+
+            const matches = itemNames.filter(name => name.includes(val));
+
+            if (matches.length > 0) {
+                searchResults.classList.remove('hidden');
+                matches.forEach(match => {
+                    const data = searchData[match];
+
+                    const li = document.createElement('li');
+                    li.className = "px-3 py-2 hover:bg-red-700 cursor-pointer text-sm text-[#FCD116] border-b border-orange-600 last:border-0 flex justify-between items-center";
+
+                    li.innerHTML = `
+                        <span class="font-medium">${data.originalName}</span>
+                        <span class="text-[10px] uppercase opacity-80 border border-[#FCD116] rounded px-1">${data.type}</span>
+                    `;
+
+                    li.addEventListener('click', () => {
+                        const marker = data.marker;
+                        map.flyTo(marker.getLatLng(), 16, { duration: 1.5 });
+                        setTimeout(() => { marker.openPopup(); }, 1500);
+                        searchInput.value = data.originalName;
+                        searchResults.classList.add('hidden');
+
+                        // Tutup sidebar di mobile setelah melakukan pencarian agar peta langsung terlihat
+                        if (window.innerWidth < 768) {
+                            toggleMobileMenu();
+                        }
+                    });
+
+                    searchResults.appendChild(li);
+                });
+            } else {
+                searchResults.classList.remove('hidden');
+                searchResults.innerHTML = '<li class="px-3 py-2 text-sm text-[#FCD116]/70 italic">Data tidak ditemukan</li>';
+            }
+        });
+
+        document.addEventListener('click', function (e) {
+            if (!searchInput.contains(e.target) && !searchResults.contains(e.target)) {
+                searchResults.classList.add('hidden');
+            }
+        });
+
+    </script>
+</body>
+
+</html>
