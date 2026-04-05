@@ -65,6 +65,26 @@
             color: #d92d20;
         }
 
+        /* CSS Baru untuk Area Gambar Pop-up */
+        .popup-image-container {
+            width: 100%;
+            height: 120px;
+            margin-bottom: 8px;
+            border-radius: 4px;
+            overflow: hidden;
+            background-color: #f3f4f6;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border: 1px solid #e5e7eb;
+        }
+
+        .popup-image {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+
         .custom-icon-wrapper {
             display: flex;
             justify-content: center;
@@ -135,7 +155,7 @@
     <!-- HEADER -->
     <header class="bg-[#FCD116] h-16 flex items-center justify-between px-4 md:px-6 shrink-0 z-50 shadow-md relative">
         <div class="flex items-center gap-2 md:gap-4">
-            <!-- Hamburger Menu Button (Hanya muncul di Mobile) -->
+            <!-- Hamburger Menu Button -->
             <button onclick="toggleMobileMenu()"
                 class="md:hidden text-[#E3242B] p-1 rounded hover:bg-yellow-400 transition-colors focus:outline-none"
                 title="Buka Menu">
@@ -166,7 +186,6 @@
             class="absolute inset-0 bg-black/60 z-[40] hidden md:hidden transition-opacity"></div>
 
         <!-- SIDEBAR -->
-        <!-- Menambahkan kelas responsif: posisi absolut + disembunyikan (-translate-x-full) di mobile, kembali normal di layar sedang (md:relative md:translate-x-0) -->
         <aside id="sidebar"
             class="w-80 max-w-[85vw] bg-[#00529C] p-4 flex flex-col gap-4 overflow-y-auto z-[50] absolute inset-y-0 left-0 transform -translate-x-full md:relative md:translate-x-0 transition-transform duration-300 ease-in-out shadow-2xl">
 
@@ -272,9 +291,7 @@
             </div>
 
             <!-- PANEL 5: Aksi Bawah (Lokasi & Reset) -->
-            <!-- REVISI: Menghapus mt-auto dan menggantinya dengan mt-2 border-t agar layout tidak saling menekan saat layar pendek -->
             <div class="mt-2 pt-4 border-t border-blue-800 flex flex-col gap-2 shrink-0">
-                <!-- Tombol Navigasi Lokasi Saya -->
                 <button onclick="findMyLocation(); toggleMobileMenu();"
                     class="w-full bg-[#E3242B] text-[#FCD116] font-bold py-2 px-2 rounded-sm border-b-4 border-r-2 border-red-800 hover:bg-red-700 transition-all flex items-center justify-center gap-2"
                     title="Cari Lokasi Saya ke Halte">
@@ -282,7 +299,6 @@
                     Lokasi Saya ke Halte
                 </button>
 
-                <!-- Tombol Reset Tampilan -->
                 <button onclick="resetMap(); toggleMobileMenu();"
                     class="w-full bg-[#FCD116] text-[#E3242B] font-bold py-2 px-2 rounded-sm border-b-4 border-r-2 border-yellow-600 hover:bg-yellow-400 transition-all flex items-center justify-center gap-2">
                     <i class="ph-bold ph-house text-xl"></i>
@@ -308,8 +324,6 @@
         function toggleMobileMenu() {
             const sidebar = document.getElementById('sidebar');
             const backdrop = document.getElementById('mobile-backdrop');
-
-            // Memicu kelas Tailwind agar sidebar masuk/keluar
             sidebar.classList.toggle('-translate-x-full');
             backdrop.classList.toggle('hidden');
         }
@@ -352,6 +366,7 @@
         const iconHalte = L.divIcon({ className: 'custom-icon-wrapper', html: mapStyles.halte.htmlMarker, iconSize: [28, 28], iconAnchor: [14, 14], popupAnchor: [0, -14] });
         const iconSekolah = L.divIcon({ className: 'custom-icon-wrapper', html: mapStyles.sekolah.htmlMarker, iconSize: [28, 28], iconAnchor: [14, 14], popupAnchor: [0, -14] });
 
+        // URL Data GeoJSON 
         const urlGeoJSON = {
             halte: 'halte.geojson',
             sekolah: 'sekolah.geojson',
@@ -389,12 +404,25 @@
             });
         }
 
-        function generatePopupHTML(title, address, subinfo, iconHtml) {
+        // --- FUNGSI GENERATE POPUP ---
+        function generatePopupHTML(title, address, subinfo, iconHtml, imageUrl) {
+            let imageSection = '';
+
+            // Render kontainer gambar. Jika path error/gambar belum ada, akan di-handle oleh atribut onerror.
+            if (imageUrl) {
+                imageSection = `
+                    <div class="popup-image-container">
+                        <img src="${imageUrl}" alt="Foto ${title}" class="popup-image" onerror="this.onerror=null; this.src='https://via.placeholder.com/250x120/fcd116/e3242b?text=Foto+Belum+Tersedia';">
+                    </div>
+                `;
+            }
+
             return `
                 <div class="popup-header">
                     ${iconHtml || ''} <span>${title || 'Tanpa Nama'}</span>
                 </div>
                 <div class="popup-body">
+                    ${imageSection}
                     ${address || 'Alamat tidak tersedia'}<br>
                     <span style="font-size: 11px; opacity: 0.8; margin-top: 5px; display: block;">${subinfo || ''}</span>
                 </div>
@@ -406,6 +434,10 @@
             pointToLayer: function (feature, latlng) {
                 const marker = L.marker(latlng, { icon: iconHalte });
                 const nama = feature.properties.nama || "Halte Tanpa Nama";
+
+                // --- PENGAMBILAN FOTO OTOMATIS BERDASARKAN NAMA ---
+                // Secara otomatis mengarahkan ke folder images/ dengan nama file persis nama halte + .jpg
+                const localImageUrl = `images/${nama}.jpg`;
 
                 const timetableHtml = `
                     <div style="margin-top: 8px; border-top: 1px dashed #E3242B; padding-top: 5px;">
@@ -419,7 +451,7 @@
                 const finalHalteInfo = (feature.properties.info ? feature.properties.info + "<br>" : "") + timetableHtml;
 
                 const halteIconHtml = '<i class="ph-bold ph-bus"></i>';
-                const popupContent = generatePopupHTML(nama, feature.properties.alamat, finalHalteInfo, halteIconHtml);
+                const popupContent = generatePopupHTML(nama, feature.properties.alamat, finalHalteInfo, halteIconHtml, localImageUrl);
                 marker.bindPopup(popupContent);
                 return marker;
             }
@@ -456,8 +488,12 @@
                 const finalInfo = (feature.properties.info ? feature.properties.info + "<br>" : "") + `<strong style="display:block; margin-top:4px; font-weight:600;">${jarakText}</strong>`;
                 const nama = feature.properties.nama || "Sekolah Tanpa Nama";
 
+                // --- PENGAMBILAN FOTO OTOMATIS BERDASARKAN NAMA ---
+                // Otomatis mengarahkan ke folder images/ dengan nama persis nama sekolah + .jpg
+                const localImageUrl = `images/${nama}.jpg`;
+
                 const sekolahIconHtml = '<i class="ph-bold ph-student"></i>';
-                const popupContent = generatePopupHTML(nama, feature.properties.alamat, finalInfo, sekolahIconHtml);
+                const popupContent = generatePopupHTML(nama, feature.properties.alamat, finalInfo, sekolahIconHtml, localImageUrl);
                 marker.bindPopup(popupContent);
                 return marker;
             }
@@ -739,7 +775,6 @@
                         searchInput.value = data.originalName;
                         searchResults.classList.add('hidden');
 
-                        // Tutup sidebar di mobile setelah melakukan pencarian agar peta langsung terlihat
                         if (window.innerWidth < 768) {
                             toggleMobileMenu();
                         }
