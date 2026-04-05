@@ -169,13 +169,14 @@
                 Sekolah Surabaya</span>
         </div>
         <nav class="flex gap-3 md:gap-6">
-            <a href="#"
-                class="text-[#E3242B] hover:text-[#b91c22] font-medium text-sm md:text-lg decoration-2 underline-offset-4 hover:underline">Home</a>
-            <a href="#"
-                class="text-[#E3242B] hover:text-[#b91c22] font-medium text-sm md:text-lg decoration-2 underline-offset-4 underline">WebGIS</a>
-            <a href="#"
-                class="text-[#E3242B] hover:text-[#b91c22] font-medium text-sm md:text-lg decoration-2 underline-offset-4 hover:underline hidden sm:inline">Contact</a>
-        </nav>
+            <nav class="flex gap-3 md:gap-6">
+                <a href="home.html"
+                    class="text-[#E3242B] hover:text-[#b91c22] font-medium text-sm md:text-lg decoration-2 underline-offset-4 underline">Home</a>
+                <a href="index.html"
+                    class="text-[#E3242B] hover:text-[#b91c22] font-medium text-sm md:text-lg decoration-2 underline-offset-4 hover:underline">WebGIS</a>
+                <a href="#"
+                    class="text-[#E3242B] hover:text-[#b91c22] font-medium text-sm md:text-lg decoration-2 underline-offset-4 hover:underline hidden sm:inline">Contact</a>
+            </nav>
     </header>
 
     <!-- MAIN CONTENT AREA -->
@@ -408,7 +409,6 @@
         function generatePopupHTML(title, address, subinfo, iconHtml, imageUrl) {
             let imageSection = '';
 
-            // Render kontainer gambar. Jika path error/gambar belum ada, akan di-handle oleh atribut onerror.
             if (imageUrl) {
                 imageSection = `
                     <div class="popup-image-container">
@@ -435,20 +435,10 @@
                 const marker = L.marker(latlng, { icon: iconHalte });
                 const nama = feature.properties.nama || "Halte Tanpa Nama";
 
-                // --- PENGAMBILAN FOTO OTOMATIS BERDASARKAN NAMA ---
-                // Secara otomatis mengarahkan ke folder images/ dengan nama file persis nama halte + .jpg
-                const localImageUrl = `images/${nama}.jpg`;
+                const safeName = encodeURIComponent(nama);
+                const localImageUrl = `images/${safeName}.jpg`;
 
-                const timetableHtml = `
-                    <div style="margin-top: 8px; border-top: 1px dashed #E3242B; padding-top: 5px;">
-                        <strong style="font-size: 11px;">Jadwal Estimasi Keberangkatan:</strong>
-                        <table style="width: 100%; font-size: 11px; margin-top: 2px;">
-                            <tr><td style="width: 35%;">Pagi</td><td>: 05:45 WIB, 06:15 WIB</td></tr>
-                            <tr><td>Siang</td><td>: 14:00 WIB, 15:30 WIB</td></tr>
-                        </table>
-                    </div>
-                `;
-                const finalHalteInfo = (feature.properties.info ? feature.properties.info + "<br>" : "") + timetableHtml;
+                const finalHalteInfo = feature.properties.info ? feature.properties.info : "";
 
                 const halteIconHtml = '<i class="ph-bold ph-bus"></i>';
                 const popupContent = generatePopupHTML(nama, feature.properties.alamat, finalHalteInfo, halteIconHtml, localImageUrl);
@@ -488,9 +478,8 @@
                 const finalInfo = (feature.properties.info ? feature.properties.info + "<br>" : "") + `<strong style="display:block; margin-top:4px; font-weight:600;">${jarakText}</strong>`;
                 const nama = feature.properties.nama || "Sekolah Tanpa Nama";
 
-                // --- PENGAMBILAN FOTO OTOMATIS BERDASARKAN NAMA ---
-                // Otomatis mengarahkan ke folder images/ dengan nama persis nama sekolah + .jpg
-                const localImageUrl = `images/${nama}.jpg`;
+                const safeName = encodeURIComponent(nama);
+                const localImageUrl = `images/${safeName}.jpg`;
 
                 const sekolahIconHtml = '<i class="ph-bold ph-student"></i>';
                 const popupContent = generatePopupHTML(nama, feature.properties.alamat, finalInfo, sekolahIconHtml, localImageUrl);
@@ -626,6 +615,7 @@
                 let nearestHalteFeature = null;
                 let nearestHalteLatLng = null;
 
+                // 1. CARI HALTE TERDEKAT SECARA GEOGRAFIS (TARIK LURUS) TERLEBIH DAHULU
                 if (dataHalteRaw) {
                     dataHalteRaw.features.forEach(halte => {
                         if (halte.geometry && halte.geometry.coordinates) {
@@ -650,22 +640,72 @@
                 userMarker = L.marker(userLatLng, { icon: userIcon, zIndexOffset: 1000 }).addTo(map);
 
                 if (nearestHalteFeature) {
-                    const distKm = (minDistance / 1000).toFixed(2);
-                    userMarker.bindPopup(`
-                        <div style="text-align:center; color:#00529C;">
-                            <strong style="font-size:14px; border-bottom:1px solid #00529C; padding-bottom:2px;">📍 Lokasi Anda Saat Ini</strong><br>
-                            <span style="font-size:12px; display:block; margin-top:5px;">Halte bus sekolah terdekat:</span>
-                            <strong style="color:#E3242B;">${nearestHalteFeature.properties.nama}</strong><br>
-                            <span style="font-size:11px; font-weight:bold;">(Jarak Tarik Lurus: ${distKm} km)</span>
-                        </div>
-                    `).openPopup();
+                    // Berikan notifikasi bahwa kita sedang memproses rute jaringan jalan
+                    showToast("Menghitung rute jalan kaki...");
 
-                    userLine = L.polyline([userLatLng, nearestHalteLatLng], {
-                        color: '#3b82f6',
-                        weight: 3,
-                        dashArray: '5, 10',
-                        opacity: 0.8
-                    }).addTo(map);
+                    const startLon = userLng;
+                    const startLat = userLat;
+                    const endLon = nearestHalteLatLng.lng;
+                    const endLat = nearestHalteLatLng.lat;
+
+                    // 2. GUNAKAN OSRM API UNTUK MENGHITUNG RUTE JARINGAN JALAN
+                    const osrmUrl = `https://router.project-osrm.org/route/v1/walking/${startLon},${startLat};${endLon},${endLat}?overview=full&geometries=geojson`;
+
+                    fetch(osrmUrl)
+                        .then(response => response.json())
+                        .then(data => {
+                            if (data.code === 'Ok' && data.routes.length > 0) {
+                                const route = data.routes[0];
+                                const routeDistanceKm = (route.distance / 1000).toFixed(2);
+                                const routeCoordinates = route.geometry.coordinates;
+
+                                // Balik koordinat dari [lon, lat] (OSRM) menjadi [lat, lon] (Leaflet)
+                                const latLngs = routeCoordinates.map(coord => [coord[1], coord[0]]);
+
+                                userMarker.bindPopup(`
+                                    <div style="text-align:center; color:#00529C;">
+                                        <strong style="font-size:14px; border-bottom:1px solid #00529C; padding-bottom:2px;">📍 Lokasi Anda Saat Ini</strong><br>
+                                        <span style="font-size:12px; display:block; margin-top:5px;">Halte bus sekolah terdekat:</span>
+                                        <strong style="color:#E3242B;">${nearestHalteFeature.properties.nama}</strong><br>
+                                        <span style="font-size:11px; font-weight:bold;">(Jarak Rute Jalan: ${routeDistanceKm} km)</span>
+                                    </div>
+                                `).openPopup();
+
+                                userLine = L.polyline(latLngs, {
+                                    color: '#3b82f6',
+                                    weight: 5,
+                                    opacity: 0.8
+                                }).addTo(map);
+
+                                // Paskan peta agar rute penuh terlihat
+                                map.fitBounds(userLine.getBounds(), { padding: [50, 50] });
+
+                            } else {
+                                throw new Error("Rute tidak ditemukan");
+                            }
+                        })
+                        .catch(err => {
+                            console.warn("OSRM routing gagal, kembali menggunakan jarak lurus", err);
+                            // 3. FALLBACK: JIKA OSRM GAGAL/DIBLOKIR, KEMBALI KE GARIS LURUS
+                            const distKm = (minDistance / 1000).toFixed(2);
+                            userMarker.bindPopup(`
+                                <div style="text-align:center; color:#00529C;">
+                                    <strong style="font-size:14px; border-bottom:1px solid #00529C; padding-bottom:2px;">📍 Lokasi Anda Saat Ini</strong><br>
+                                    <span style="font-size:12px; display:block; margin-top:5px;">Halte bus sekolah terdekat:</span>
+                                    <strong style="color:#E3242B;">${nearestHalteFeature.properties.nama}</strong><br>
+                                    <span style="font-size:11px; font-weight:bold;">(Jarak Tarik Lurus: ${distKm} km)</span><br>
+                                    <span style="font-size:10px; color:red;">*Gagal memuat rute jalan</span>
+                                </div>
+                            `).openPopup();
+
+                            userLine = L.polyline([userLatLng, nearestHalteLatLng], {
+                                color: '#3b82f6',
+                                weight: 3,
+                                dashArray: '5, 10',
+                                opacity: 0.8
+                            }).addTo(map);
+                        });
+
                 } else {
                     userMarker.bindPopup(`<strong style="color:#00529C;">📍 Lokasi Anda Saat Ini</strong>`).openPopup();
                 }
